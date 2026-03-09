@@ -14,8 +14,9 @@ WORKDIR /app
 COPY . /app
 
 # Install any needed packages specified in requirements.txt and force latest yt-dlp nightly
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir -U "yt-dlp[default]" --pre
+RUN apt-get update && apt-get install -y git && \
+    pip install --no-cache-dir -r requirements.txt googletrans==4.0.0-rc1 && \
+    pip install --no-cache-dir --force-reinstall "yt-dlp[default] @ git+https://github.com/yt-dlp/yt-dlp.git"
 
 # Create the downloads directory
 RUN mkdir -p downloads

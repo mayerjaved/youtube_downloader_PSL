@@ -36,14 +36,14 @@ def download_channel(channel_url, output_path="downloads", max_videos=10):
         # Subtitle settings
         'writesubtitles': True,          # Download official subtitles
         'writeautomaticsubtitles': True, # Fallback to auto-generated subtitles
-        'subtitleslangs': ['en.*', 'ur.*'], # Match English and Urdu variants (including auto-translated ur-en)
+        'subtitleslangs': ['en', 'ur', 'ur-en', 'en.*', 'ur.*'], # Match English, Urdu, and YouTube's specific auto-translated 'ur-en' (Urdu from English) variant
         'subtitlesformat': 'srt',        # Prefer SRT format
-        'embedsubtitles': True,          # Embed subtitles into the video file (requires ffmpeg)
+        # Disable embedding so the individual .srt files remain on disk for the web player
+        'embedsubtitles': False,          
         
         # Post-processors for robust subtitle handling
         'postprocessors': [
             {'key': 'FFmpegSubtitlesConvertor', 'format': 'srt'}, # Convert all to SRT
-            {'key': 'FFmpegEmbedSubtitle'},                       # Embed into video
         ],
         
         # Workarounds for YouTube's 403 Forbidden / bot detection
@@ -58,8 +58,9 @@ def download_channel(channel_url, output_path="downloads", max_videos=10):
         'ignoreerrors': True,
         
         # Restrict sleep between requests to avoid rate limits (be gentle)
-        'sleep_interval': 3,
-        'max_sleep_interval': 7,
+        'sleep_interval': 5,
+        'max_sleep_interval': 15,
+        'sleep_subtitles': 3, # Wait 3 seconds before requesting subtitle data to avoid HTTP 429 Too Many Requests
     }
 
     print(f"Starting download process for: {channel_url}")
@@ -71,10 +72,66 @@ def download_channel(channel_url, output_path="downloads", max_videos=10):
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([channel_url])
             print("\nDownload process completed!")
+            
+            # Since YouTube is currently blocking/withholding urdu subtitles due to rate-limiting requests
+            # on auto-translated captions, we will translate the freshly downloaded english captions locally.
+            print("\nTranslating downloaded English subtitles to Urdu...")
+            _translate_subtitles_to_urdu(output_path)
+            
     except Exception as e:
         print(f"\nAn error occurred during the download process: {e}")
+
+def _translate_subtitles_to_urdu(output_path):
+    """Finds all .en.srt files in the output path and translates them to .ur.srt using googletrans."""
+    try:
+        from googletrans import Translator
+    except ImportError:
+        print("googletrans is not installed. Skipping local Urdu subtitle generation.")
+        return
+
+    translator = Translator()
+    
+    # Recursively find all .en.srt files in the output path
+    for root, _, files in os.walk(output_path):
+        for file in files:
+            if file.endswith('.en.srt'):
+                en_path = os.path.join(root, file)
+                ur_path = en_path.replace('.en.srt', '.ur.srt')
+                
+                # Skip if already translated
+                if os.path.exists(ur_path):
+                    continue
+                    
+                print(f"Translating: {file} -> Urdu...")
+                try:
+                    with open(en_path, 'r', encoding='utf-8') as f:
+                        lines = f.readlines()
+                    
+                    translated_lines = []
+                    # SRT files have structure: Index \n Timecode \n Subtitle Text \n\n
+                    for i, line in enumerate(lines):
+                        line_stripped = line.strip()
+                        # If it's empty, an index number, or a timecode, keep it as is
+                        if not line_stripped or line_stripped.isdigit() or '-->' in line_stripped:
+                            translated_lines.append(line)
+                        else:
+                            # It's actual subtitle text, translate it
+                            try:
+                                result = translator.translate(line_stripped, src='en', dest='ur')
+                                translated_lines.append(result.text + '\n')
+                            except Exception as e:
+                                # Fallback to original text if translation fails
+                                print(f"  Warning: Translation failed for line '{line_stripped}': {e}")
+                                translated_lines.append(line)
+                                
+                    with open(ur_path, 'w', encoding='utf-8') as f:
+                        f.writelines(translated_lines)
+                        
+                    print(f"Successfully created: {os.path.basename(ur_path)}")
+                except Exception as e:
+                    print(f"Failed to translate {en_path}: {e}")
 
 if __name__ == "__main__":
     # Channel URL provided
     url = "https://www.youtube.com/@pslhamzafoundationacademyf7624/videos"
-    download_channel(url, max_videos=5)
+    download_channel(url, max_videos=10)
