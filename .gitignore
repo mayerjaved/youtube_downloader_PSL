@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# YouTube Downloader specific
+downloads/
+test_dl/
+test_dl2/
+test_dl3/
+test_download/
+test_sub/
+test_ur/
+
+# Development
+.gemini/
+.idea/
+.vscode/
+*.swp
+*.log
