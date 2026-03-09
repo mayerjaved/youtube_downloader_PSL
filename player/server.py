@@ -123,26 +123,24 @@ class VideoPlayerHandler(SimpleHTTPRequestHandler):
             # Strip '/files' but keep the leading slash, leaving the rest URL-encoded
             self.path = self.path[6:]
             
-            # Temporarily change directory to serve the file
-            original_dir = os.getcwd()
-            os.chdir(DOWNLOADS_DIR)
+            # Python 3.7+ uses self.directory, fallback to os.chdir for older
+            if hasattr(self, 'directory'):
+                self.directory = DOWNLOADS_DIR
+            else:
+                os.chdir(DOWNLOADS_DIR)
             
-            # Let simple HTTP request handler serve the file (handles range requests and decoding!)
-            result = super().do_GET()
-            
-            # Restore directory
-            os.chdir(original_dir)
-            return result
+            return super().do_GET()
 
         # 3. Serve the player UI (index.html) from the player directory
         elif path == '/' or path == '/index.html':
             self.path = '/index.html'
-            # Temporarily change to player directory
-            original_dir = os.getcwd()
-            os.chdir(PLAYER_DIR)
-            result = super().do_GET()
-            os.chdir(original_dir)
-            return result
+            
+            if hasattr(self, 'directory'):
+                self.directory = PLAYER_DIR
+            else:
+                os.chdir(PLAYER_DIR)
+                
+            return super().do_GET()
             
         # 4. 404 for anything else
         else:

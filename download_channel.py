@@ -1,8 +1,13 @@
+"""
 # Docker commands to run this script (from the project root):
 # 1. Build the image: docker build -t yt-downloader .
-# 2. Run the container to download videos: 
-# docker run --rm -v "$PWD/downloads:/app/downloads" yt-downloader
+docker build -t yt-downloader .
 
+# 2. Run the container to download videos to your D: drive: 
+docker run --rm -it -v "D:\PSL_Downloads:/app/downloads" yt-downloader
+docker run --rm -it -v "D:\PSL_Downloads:/app/downloads" yt-downloader
+
+"""
 import yt_dlp
 import os
 import shutil
@@ -20,15 +25,14 @@ def get_ffmpeg_path():
     
     return None
 
-def download_channel(channel_url, output_path="downloads", max_videos=10):
+def download_channel(channel_url, output_path="downloads"):
     # Ensure the output directory exists
     os.makedirs(output_path, exist_ok=True)
     
     # Configure yt-dlp options
     ydl_opts = {
         'ffmpeg_location': get_ffmpeg_path(),
-        # Limit to the first N videos (for testing)
-        'playlistend': max_videos,
+        # Download all videos in the playlist/channel
         
         # Format selection: Best video + best audio, matched together
         'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
@@ -134,4 +138,10 @@ def _translate_subtitles_to_urdu(output_path):
 if __name__ == "__main__":
     # Channel URL provided
     url = "https://www.youtube.com/@pslhamzafoundationacademyf7624/videos"
-    download_channel(url, max_videos=10)
+    
+    import os
+    # If running normally on Windows, use D: drive. 
+    # If running inside Linux Docker container, use the 'downloads' folder which Docker maps to the D: drive.
+    dest_path = r"D:\PSL_Downloads" if os.name == 'nt' else "downloads"
+    
+    download_channel(url, output_path=dest_path)

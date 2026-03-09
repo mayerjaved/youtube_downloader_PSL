@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -48,7 +49,8 @@
             overflow: hidden;
             box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
             position: relative;
-            padding-top: 56.25%; /* 16:9 Aspect Ratio */
+            padding-top: 56.25%;
+            /* 16:9 Aspect Ratio */
         }
 
         video {
@@ -63,13 +65,55 @@
 
         /* Subtitle styling via CSS for the <track> element */
         ::cue {
-            background-color: rgba(0, 0, 0, 0.8);
-            color: white;
+            /* Hide the native subtitles whenever we use our custom overlay */
+            color: transparent;
+            background-color: transparent;
+        }
+
+        /* Custom Dual Subtitle Overlay */
+        .subtitle-overlay {
+            position: absolute;
+            bottom: 5%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .sub-text {
+            background-color: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(4px);
+            color: #ffffff;
             font-family: 'Inter', sans-serif;
-            font-size: 1.2rem;
-            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
-            padding: 0.2em 0.5em;
-            border-radius: 4px;
+            font-size: 1.4rem;
+            text-align: center;
+            padding: 8px 16px;
+            border-radius: 8px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: opacity 0.2s ease;
+            opacity: 0;
+            line-height: 1.3;
+        }
+
+        .sub-text.visible {
+            opacity: 1;
+        }
+
+        .sub-text.ur {
+            font-size: 1.6rem;
+            color: #fca5a5;
+            /* Light red/pink accent for Urdu */
+        }
+
+        .sub-text.en {
+            color: #bae6fd;
+            /* Light blue accent for English */
         }
 
         .video-info {
@@ -180,206 +224,337 @@
             .container {
                 grid-template-columns: 1fr;
             }
+
             .playlist-section {
                 max-height: 500px;
             }
         }
     </style>
 </head>
+
 <body>
 
-<div class="container">
-    <div class="player-section">
-        <div class="video-container">
-            <video id="main-video" controls crossorigin="anonymous">
-                <!-- Video sources and tracks will be injected here via JS -->
-                 Your browser does not support the video tag.
-            </video>
+    <div class="container">
+        <div class="player-section">
+            <div class="video-container">
+                <video id="main-video" controls crossorigin="anonymous">
+                    <!-- Video sources and tracks will be injected here via JS -->
+                    Your browser does not support the video tag.
+                </video>
+
+                <!-- Custom subtitle overlay -->
+                <div class="subtitle-overlay" id="subtitle-overlay">
+                    <div class="sub-text ur" id="sub-ur"></div>
+                    <div class="sub-text en" id="sub-en"></div>
+                </div>
+            </div>
+
+            <div class="video-info">
+                <h1 class="video-title" id="current-title">Select a video to play</h1>
+
+                <div class="subtitle-controls"
+                    style="margin-bottom: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
+                    <!-- Playback Navigation -->
+                    <button class="btn" id="btn-prev" onclick="playPrevious()">&#9664; Previous Video</button>
+                    <button class="btn" id="btn-next" onclick="playNext()">Next Video &#9654;</button>
+                </div>
+
+                <div class="subtitle-controls" id="subtitle-toggles">
+                    <button class="btn" onclick="toggleSubtitles('en')">English CC</button>
+                    <button class="btn" onclick="toggleSubtitles('ur')">Urdu CC</button>
+                    <button class="btn active" onclick="toggleSubtitles('dual')">Dual Subtitles</button>
+                    <button class="btn" onclick="toggleSubtitles('off')">Off</button>
+                </div>
+            </div>
         </div>
-        
-        <div class="video-info">
-            <h1 class="video-title" id="current-title">Select a video to play</h1>
-            
-            <div class="subtitle-controls" id="subtitle-toggles">
-                <button class="btn active" onclick="toggleSubtitles('en')">English CC</button>
-                <button class="btn" onclick="toggleSubtitles('ur')">Urdu CC</button>
-                <button class="btn" onclick="toggleSubtitles('off')">Subtitles Off</button>
+
+        <div class="playlist-section">
+            <h2 class="playlist-header">Downloaded Videos</h2>
+            <div class="playlist-items" id="playlist">
+                <!-- Playlist items will be populated via JS -->
+                <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                    Loading videos...<br>
+                    <small>(Make sure the local server is running)</small>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="playlist-section">
-        <h2 class="playlist-header">Downloaded Videos</h2>
-        <div class="playlist-items" id="playlist">
-            <!-- Playlist items will be populated via JS -->
-            <div style="padding: 2rem; text-align: center; color: var(--text-secondary);">
-                Loading videos...<br>
-                <small>(Make sure the local server is running)</small>
-            </div>
-        </div>
-    </div>
-</div>
+    <script>
+        const videoElement = document.getElementById('main-video');
+        const titleElement = document.getElementById('current-title');
+        const playlistElement = document.getElementById('playlist');
 
-<script>
-    const videoElement = document.getElementById('main-video');
-    const titleElement = document.getElementById('current-title');
-    const playlistElement = document.getElementById('playlist');
-    
-    // Fetch the list of videos from our local API
-    async function loadVideos() {
-        try {
-            const response = await fetch('/api/videos');
-            const data = await response.json();
-            
-            if (data.status === 'success') {
-                renderPlaylist(data.videos);
-                
-                // Play the first video if available
-                if (data.videos.length > 0) {
-                    playVideo(data.videos[0]);
+        let allVideos = [];
+        let currentVideoIndex = -1;
+
+        // Fetch the list of videos from our local API
+        async function loadVideos() {
+            try {
+                const response = await fetch('/api/videos');
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    allVideos = data.videos;
+                    renderPlaylist(data.videos);
+
+                    // Play the first video if available
+                    if (data.videos.length > 0) {
+                        playVideo(data.videos[0]);
+                    }
+                } else {
+                    showError("Failed to load videos from server.");
                 }
-            } else {
-                showError("Failed to load videos from server.");
+            } catch (error) {
+                console.error("Error fetching videos:", error);
+                showError("Could not connect to the local server. Is it running?");
             }
-        } catch (error) {
-            console.error("Error fetching videos:", error);
-            showError("Could not connect to the local server. Is it running?");
-        }
-    }
-
-    function renderPlaylist(videos) {
-        playlistElement.innerHTML = '';
-        
-        if (videos.length === 0) {
-            playlistElement.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">No videos found in the downloads folder.</div>';
-            return;
         }
 
-        videos.forEach(video => {
-            const item = document.createElement('div');
-            item.className = 'playlist-item';
-            item.dataset.id = video.id;
-            
-            // Format title (remove ID and extension)
-            const cleanTitle = video.title.replace(/\[.*\]/, '').trim();
-            
-            let badgesHTML = '';
-            if (video.has_en_sub) badgesHTML += '<span class="badge has-cc">EN CC</span>';
-            if (video.has_ur_sub) badgesHTML += '<span class="badge has-cc">UR CC</span>';
-            
-            item.innerHTML = `
+        // Auto-play next video when current one finishes
+        videoElement.addEventListener('ended', playNext);
+
+        function renderPlaylist(videos) {
+            playlistElement.innerHTML = '';
+
+            if (videos.length === 0) {
+                playlistElement.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--text-secondary);">No videos found in the downloads folder.</div>';
+                return;
+            }
+
+            videos.forEach(video => {
+                const item = document.createElement('div');
+                item.className = 'playlist-item';
+                item.dataset.id = video.id;
+
+                // Format title (remove ID and extension)
+                const cleanTitle = video.title.replace(/\[.*\]/, '').trim();
+
+                let badgesHTML = '';
+                if (video.has_en_sub) badgesHTML += '<span class="badge has-cc">EN CC</span>';
+                if (video.has_ur_sub) badgesHTML += '<span class="badge has-cc">UR CC</span>';
+
+                item.innerHTML = `
                 <div class="item-title">${cleanTitle}</div>
                 <div class="item-meta">
                     <span class="badge">${video.ext.toUpperCase()}</span>
                     ${badgesHTML}
                 </div>
             `;
-            
-            item.onclick = () => playVideo(video);
-            playlistElement.appendChild(item);
-        });
-    }
 
-    function playVideo(videoObj) {
-        // Update styling in playlist
-        document.querySelectorAll('.playlist-item').forEach(el => {
-            el.classList.remove('playing');
-            if (el.dataset.id === videoObj.id) {
-                el.classList.add('playing');
+                item.onclick = () => playVideo(video);
+                playlistElement.appendChild(item);
+            });
+        }
+
+        function playVideo(videoObj) {
+            // Find index of the video being played
+            currentVideoIndex = allVideos.findIndex(v => v.id === videoObj.id);
+            updateNavButtons();
+
+            // Update styling in playlist
+            document.querySelectorAll('.playlist-item').forEach(el => {
+                el.classList.remove('playing');
+                if (el.dataset.id === videoObj.id) {
+                    el.classList.add('playing');
+                    // Scroll the playing item into view in the playlist
+                    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
+            });
+
+            // Update Title
+            const cleanTitle = videoObj.title.replace(/\[.*\]/, '').trim();
+            titleElement.textContent = cleanTitle;
+
+            // Construct source paths
+            // We serve the 'downloads' folder at the root path '/' statically
+            // Note: The python server handles serving the specific channel folder
+            const videoPath = `/files/${encodeURIComponent(videoObj.filename)}`;
+
+            // Clear existing sources and tracks
+            videoElement.innerHTML = '';
+
+            // Add video source
+            const source = document.createElement('source');
+            source.src = videoPath;
+            source.type = `video/${videoObj.ext}`;
+            videoElement.appendChild(source);
+
+            // Add subtitle tracks
+            if (videoObj.has_en_sub) {
+                const enTrack = document.createElement('track');
+                enTrack.kind = 'subtitles';
+                enTrack.label = 'English';
+                enTrack.srclang = 'en';
+                enTrack.src = `/files/${encodeURIComponent(videoObj.en_sub_file)}`;
+                // Make English default if available
+                enTrack.default = true;
+                videoElement.appendChild(enTrack);
             }
-        });
 
-        // Update Title
-        const cleanTitle = videoObj.title.replace(/\[.*\]/, '').trim();
-        titleElement.textContent = cleanTitle;
+            if (videoObj.has_ur_sub) {
+                const urTrack = document.createElement('track');
+                urTrack.kind = 'subtitles';
+                urTrack.label = 'Urdu';
+                urTrack.srclang = 'ur';
+                urTrack.src = `/files/${encodeURIComponent(videoObj.ur_sub_file)}`;
+                videoElement.appendChild(urTrack);
+            }
 
-        // Construct source paths
-        // We serve the 'downloads' folder at the root path '/' statically
-        // Note: The python server handles serving the specific channel folder
-        const videoPath = `/files/${encodeURIComponent(videoObj.filename)}`;
-        
-        // Clear existing sources and tracks
-        videoElement.innerHTML = '';
-        
-        // Add video source
-        const source = document.createElement('source');
-        source.src = videoPath;
-        source.type = `video/${videoObj.ext}`;
-        videoElement.appendChild(source);
+            // Load and play
+            videoElement.load();
 
-        // Add subtitle tracks
-        if (videoObj.has_en_sub) {
-            const enTrack = document.createElement('track');
-            enTrack.kind = 'subtitles';
-            enTrack.label = 'English';
-            enTrack.srclang = 'en';
-            enTrack.src = `/files/${encodeURIComponent(videoObj.en_sub_file)}`;
-            // Make English default if available
-            enTrack.default = true; 
-            videoElement.appendChild(enTrack);
+            // Wait a small bit for metadata to load before trying to play to avoid some browser policies
+            setTimeout(() => {
+                videoElement.play().catch(e => console.log("Autoplay prevented:", e));
+            }, 100);
+
+            // Update button states based on available tracks
+            updateSubtitleControls(videoObj);
         }
 
-        if (videoObj.has_ur_sub) {
-            const urTrack = document.createElement('track');
-            urTrack.kind = 'subtitles';
-            urTrack.label = 'Urdu';
-            urTrack.srclang = 'ur';
-            urTrack.src = `/files/${encodeURIComponent(videoObj.ur_sub_file)}`;
-            videoElement.appendChild(urTrack);
+        function playNext() {
+            if (currentVideoIndex >= 0 && currentVideoIndex < allVideos.length - 1) {
+                playVideo(allVideos[currentVideoIndex + 1]);
+            }
         }
 
-        // Load and play
-        videoElement.load();
-        
-        // Wait a small bit for metadata to load before trying to play to avoid some browser policies
-        setTimeout(() => {
-            videoElement.play().catch(e => console.log("Autoplay prevented:", e));
-        }, 100);
-
-        // Update button states based on available tracks
-        updateSubtitleControls(videoObj);
-    }
-
-    function updateSubtitleControls(videoObj) {
-        const controlsDiv = document.getElementById('subtitle-toggles');
-        controlsDiv.innerHTML = ''; // Clear
-
-        if (videoObj.has_en_sub) {
-            controlsDiv.innerHTML += `<button class="btn active" id="btn-en" onclick="toggleSubtitles('en')">English CC</button>`;
+        function playPrevious() {
+            if (currentVideoIndex > 0) {
+                playVideo(allVideos[currentVideoIndex - 1]);
+            }
         }
-        if (videoObj.has_ur_sub) {
-            controlsDiv.innerHTML += `<button class="btn" id="btn-ur" onclick="toggleSubtitles('ur')">Urdu CC</button>`;
-        }
-        
-        if (videoObj.has_en_sub || videoObj.has_ur_sub) {
-             controlsDiv.innerHTML += `<button class="btn" id="btn-off" onclick="toggleSubtitles('off')">Off</button>`;
-        } else {
-             controlsDiv.innerHTML += `<span style="color: var(--text-secondary); margin-top: 0.5rem;">No subtitles available for this video.</span>`;
-        }
-    }
 
-    function toggleSubtitles(lang) {
-        // Update button visuals
-        document.querySelectorAll('#subtitle-toggles .btn').forEach(btn => btn.classList.remove('active'));
-        const activeBtn = document.getElementById(`btn-${lang}`);
-        if(activeBtn) activeBtn.classList.add('active');
+        function updateNavButtons() {
+            const btnPrev = document.getElementById('btn-prev');
+            const btnNext = document.getElementById('btn-next');
 
-        // Update video tracks
-        const tracks = videoElement.textTracks;
-        for (let i = 0; i < tracks.length; i++) {
-            if (lang === 'off') {
-                tracks[i].mode = 'hidden';
-            } else if (tracks[i].language === lang) {
-                tracks[i].mode = 'showing';
+            if (btnPrev) {
+                btnPrev.disabled = currentVideoIndex <= 0;
+                btnPrev.style.opacity = currentVideoIndex <= 0 ? '0.5' : '1';
+                btnPrev.style.cursor = currentVideoIndex <= 0 ? 'not-allowed' : 'pointer';
+            }
+
+            if (btnNext) {
+                btnNext.disabled = currentVideoIndex >= allVideos.length - 1 || currentVideoIndex === -1;
+                btnNext.style.opacity = (currentVideoIndex >= allVideos.length - 1 || currentVideoIndex === -1) ? '0.5' : '1';
+                btnNext.style.cursor = (currentVideoIndex >= allVideos.length - 1 || currentVideoIndex === -1) ? 'not-allowed' : 'pointer';
+            }
+        }
+
+        function updateSubtitleControls(videoObj) {
+            const controlsDiv = document.getElementById('subtitle-toggles');
+            controlsDiv.innerHTML = ''; // Clear
+
+            if (videoObj.has_en_sub) {
+                controlsDiv.innerHTML += `<button class="btn" id="btn-en" onclick="toggleSubtitles('en')">English CC</button>`;
+            }
+            if (videoObj.has_ur_sub) {
+                controlsDiv.innerHTML += `<button class="btn" id="btn-ur" onclick="toggleSubtitles('ur')">Urdu CC</button>`;
+            }
+
+            if (videoObj.has_en_sub && videoObj.has_ur_sub) {
+                controlsDiv.innerHTML += `<button class="btn active" id="btn-dual" onclick="toggleSubtitles('dual')">Dual Subtitles</button>`;
+            }
+
+            if (videoObj.has_en_sub || videoObj.has_ur_sub) {
+                controlsDiv.innerHTML += `<button class="btn" id="btn-off" onclick="toggleSubtitles('off')">Off</button>`;
             } else {
-                tracks[i].mode = 'hidden';
+                controlsDiv.innerHTML += `<span style="color: var(--text-secondary); margin-top: 0.5rem;">No subtitles available for this video.</span>`;
+            }
+
+            // Setup cue change listeners immediately after controls update
+            setupCueListeners();
+            // Force the initial state to dual (or off if none exist)
+            if (videoObj.has_en_sub && videoObj.has_ur_sub) {
+                toggleSubtitles('dual');
+            } else if (videoObj.has_en_sub) {
+                toggleSubtitles('en');
+            } else if (videoObj.has_ur_sub) {
+                toggleSubtitles('ur');
+            } else {
+                toggleSubtitles('off');
             }
         }
-    }
 
-    // Initialize
-    loadVideos();
-</script>
+        let currentMode = 'dual';
+
+        function toggleSubtitles(mode) {
+            currentMode = mode;
+
+            // Update button visuals
+            document.querySelectorAll('#subtitle-toggles .btn').forEach(btn => btn.classList.remove('active'));
+            const activeBtn = document.getElementById(`btn-${mode}`);
+            if (activeBtn) activeBtn.classList.add('active');
+
+            // Always keep tracks "hidden" instead of "showing" so native renderer doesn't draw them
+            // We only want them "hidden" so the API still fires cuechange events. If "disabled", they stop firing.
+            const tracks = videoElement.textTracks;
+            for (let i = 0; i < tracks.length; i++) {
+                tracks[i].mode = 'hidden';
+            }
+
+            // Trigger a fake timeupdate to immediately refresh the overlay based on the new mode
+            renderActiveSubtitles();
+        }
+
+        function setupCueListeners() {
+            const tracks = videoElement.textTracks;
+            for (let i = 0; i < tracks.length; i++) {
+                // We need mode 'hidden' to receive cuechange events without the browser painting native subtitles
+                tracks[i].mode = 'hidden';
+                tracks[i].oncuechange = renderActiveSubtitles;
+            }
+            // Fallback: Also listen to timeupdate in case cues change between ticks
+            videoElement.addEventListener('timeupdate', renderActiveSubtitles);
+        }
+
+        function renderActiveSubtitles() {
+            if (currentMode === 'off') {
+                document.getElementById('sub-en').classList.remove('visible');
+                document.getElementById('sub-ur').classList.remove('visible');
+                return;
+            }
+
+            const tracks = videoElement.textTracks;
+            let enText = '';
+            let urText = '';
+
+            for (let i = 0; i < tracks.length; i++) {
+                const track = tracks[i];
+                const activeCues = track.activeCues;
+
+                if (activeCues && activeCues.length > 0) {
+                    // Get the text from the first active cue
+                    const text = activeCues[0].text;
+                    if (track.language === 'en') enText = text;
+                    if (track.language === 'ur') urText = text;
+                }
+            }
+
+            const enEl = document.getElementById('sub-en');
+            const urEl = document.getElementById('sub-ur');
+
+            // Render based on current mode
+            if ((currentMode === 'dual' || currentMode === 'en') && enText) {
+                enEl.innerHTML = enText.replace(/\n/g, '<br>');
+                enEl.classList.add('visible');
+            } else {
+                enEl.classList.remove('visible');
+            }
+
+            if ((currentMode === 'dual' || currentMode === 'ur') && urText) {
+                urEl.innerHTML = urText.replace(/\n/g, '<br>');
+                urEl.classList.add('visible');
+            } else {
+                urEl.classList.remove('visible');
+            }
+        }
+
+        // Initialize
+        loadVideos();
+    </script>
 
 </body>
+
 </html>
