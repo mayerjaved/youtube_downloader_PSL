@@ -58,6 +58,9 @@ def download_channel(channel_url, output_path="downloads"):
         # Output template (e.g., downloads/Channel Name/Video Title [ID].mp4)
         'outtmpl': os.path.join(output_path, '%(uploader)s', '%(title)s [%(id)s].%(ext)s'),
         
+        # Keep track of downloaded videos so we only download new ones
+        'download_archive': os.path.join(output_path, 'downloaded.txt'),
+        
         # Ignore errors for individual videos and continue downloading the rest
         'ignoreerrors': True,
         
